@@ -23,33 +23,35 @@ mongoose.connect(connectionString, {
 });
 
 const ArticleSchema = new mongoose.Schema({
-  title: String,
-  content: String
+  user: String,
+  password: String,
+  email: String
 });
 
-const Article = mongoose.model('articles', ArticleSchema);
+const member_table = mongoose.model('members', ArticleSchema);
 
 app.get('/get_NameMember', async (req, res) => {
-  const cachedArticles = cache.get('articles');
-  if (cachedArticles) {
-    res.json(cachedArticles);
+  const cachedMembers = cache.get('members');
+  if (cachedMembers) {
+    res.json(cachedMembers);
   } else {
     try {
-      const articles = await Article.find();
-      cache.set('articles', articles, 3600); // cache for 1 hour
-      res.json(articles);
+      const members = await member_table.find();
+      cache.set('members', members, 3600); // cache for 1 hour
+      res.json(members);
     } catch (err) {
       res.status(500).send(err);
     }
   }
 });
 
-app.post('/articles', async (req, res) => {
+app.post('/post_NameMember', async (req, res) => {
   try {
-    const newArticle = req.body;
-    const createdArticle = await Article.create(newArticle);
-    cache.del('articles'); // invalidate cache
-    res.status(201).json(createdArticle);
+    const newNameMember = req.body;
+    const createdNameMember = await member_table.create(newNameMember);
+    
+    cache.del('members'); // invalidate cache
+    res.status(201).json(createdNameMember);
   } catch (err) {
     res.status(500).send(err);
   }
