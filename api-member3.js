@@ -2,9 +2,6 @@ const express = require('express');
 const NodeCache = require('node-cache');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const multer = require('multer');
-const { GridFsStorage } = require('multer-gridfs-storage');
-const Grid = require('gridfs-stream');
 require('dotenv').config();
 
 const app = express();
@@ -12,6 +9,7 @@ app.use(express.json());
 app.use(cors());
 
 const cache = new NodeCache();
+
 const connectionString = process.env.CONNECTION_STRING;
 
 mongoose.connect(connectionString, {
@@ -24,33 +22,13 @@ mongoose.connect(connectionString, {
   console.error('Error connecting to MongoDB:', err.message);
 });
 
-let gfs;
-mongoose.connection.once('open', () => {
-  gfs = Grid(mongoose.connection.db, mongoose.mongo);
-  gfs.collection('uploads');
-});
-
-const storage = new GridFsStorage({
-  url: connectionString,
-  options: { useNewUrlParser: true, useUnifiedTopology: true },
-  file: (req, file) => {
-    return {
-      bucketName: 'uploads', // collection name in MongoDB
-      filename: `${Date.now()}-${file.originalname}`
-    };
-  }
-});
-
-const upload = multer({ storage });
-
 const ArticleSchema = new mongoose.Schema({
   user: String,
   password: String,
-  email: String,
-  image: String // เพิ่มฟิลด์สำหรับจัดเก็บชื่อไฟล์รูปภาพ
+  email: String
 });
 
-const member_table = mongoose.model('members', ArticleSchema);
+const Member = mongoose.model('Member', ArticleSchema);
 
 app.get('/get_NameMember', async (req, res) => {
   const cachedMembers = cache.get('members');
@@ -58,7 +36,7 @@ app.get('/get_NameMember', async (req, res) => {
     res.json(cachedMembers);
   } else {
     try {
-      const members = await member_table.find();
+      const members = await Member.find();
       cache.set('members', members, 3600); // cache for 1 hour
       res.json(members);
     } catch (err) {
@@ -67,35 +45,77 @@ app.get('/get_NameMember', async (req, res) => {
   }
 });
 
-app.post('/post_NameMember', upload.single('file'), async (req, res) => {
+app.post('/post_NameMember', async (req, res) => {
   try {
-    const { user, password, email } = req.body;
-    const newNameMember = {
-      user,
-      password,
-      email,
-      image: req.file.filename // บันทึกชื่อไฟล์รูปภาพในฐานข้อมูล
-    };
-    const createdNameMember = await member_table.create(newNameMember);
+    const newMember = req.body;
+    const createdMember = await Member.create(newMember);
 
     cache.del('members'); // invalidate cache
-    res.status(201).json(createdNameMember);
+    res.status(201).json(createdMember);
   } catch (err) {
     res.status(500).send(err);
   }
 });
 
-app.get('/image/:filename', (req, res) => {
-  gfs.files.findOne({ filename: req.params.filename }, (err, file) => {
-    if (!file || file.length === 0) {
-      return res.status(404).json({ err: 'No file exists' });
+app.put('/update_NameMember/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedMember = await Member.findByIdAndUpdate(id, req.body, { new: true });
+    if (updatedMember) {
+      cache.del('members'); // invalidate cache
+      res.json(updatedMember);
+    } else {
+      res.status(404).json({ message: 'Member not found' });
     }
-
-    const readstream = gfs.createReadStream(file.filename);
-    readstream.pipe(res);
-  });
+  } catch (err) {
+    res.status(500).send(err);
+  }
 });
 
+app.delete('/delete_NameMember/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // ตรวจสอบว่า id เป็น ObjectId ที่ถูกต้องหรือไม่
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+
+    const deletedMember = await Member.findByIdAndDelete(id);
+    if (deletedMember) {
+      cache.del('members'); // invalidate cache
+      res.status(204).json({ message: 'Member deleted successfully' });
+    } else {
+      res.status(404).json({ message: 'Member not found' });
+    }
+  } catch (err) {
+    console.error('Error occurred while deleting member:', err);
+    res.status(500).json({ message: 'Internal Server Error', error: err.message });
+  }
+});
+
+app.post('/delete_NameMember', async (req, res) => { //delete by post method
+  try {
+    const { id } = req.body;
+    const objectId = id.$oid;
+
+    // Check if the ID is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(objectId)) {
+      return res.status(400).json({ message: 'Invalid ID format' });
+    }
+
+    const deletedMember = await Member.findByIdAndDelete(objectId);
+    if (deletedMember) {
+      cache.del('members'); // invalidate cache
+      res.status(204).json({ message: 'Member deleted successfully' });
+    } else {
+      res.status(404).json({ message: 'Member not found' });
+    }
+  } catch (err) {
+    console.error('Error occurred while deleting member:', err);
+    res.status(500).json({ message: 'Internal Server Error', error: err.message });
+  }
+});
 app.listen(3000, () => {
   console.log('Server is running on port 3000');
 });

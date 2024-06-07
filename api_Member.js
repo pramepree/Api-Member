@@ -30,6 +30,30 @@ const ArticleSchema = new mongoose.Schema({
 
 const member_table = mongoose.model('members', ArticleSchema);
 
+app.post('/post_NameMember', async (req, res) => {
+  try {
+    const newNameMember = req.body;
+    const createdNameMember = await member_table.create(newNameMember);
+
+    cache.del('members'); // invalidate cache
+    res.status(201).json(createdNameMember);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+app.put('/update_NameMember/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const updatedNameMember = req.body;
+    const result = await member_table.findByIdAndUpdate(id, updatedNameMember, { new: true });
+    cache.del('members'); // invalidate cache
+    res.json(result);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
 app.get('/get_NameMember', async (req, res) => {
   const cachedMembers = cache.get('members');
   if (cachedMembers) {
@@ -45,13 +69,13 @@ app.get('/get_NameMember', async (req, res) => {
   }
 });
 
-app.post('/post_NameMember', async (req, res) => {
+
+app.delete('/delete_NameMember/:id', async (req, res) => {
   try {
-    const newNameMember = req.body;
-    const createdNameMember = await member_table.create(newNameMember);
-    
+    const id = req.params.id;
+    await member_table.findByIdAndRemove(id);
     cache.del('members'); // invalidate cache
-    res.status(201).json(createdNameMember);
+    res.status(204).json({ message: 'Member deleted successfully' });
   } catch (err) {
     res.status(500).send(err);
   }
